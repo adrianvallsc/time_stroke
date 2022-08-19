@@ -1,0 +1,94 @@
+---
+title: "Untitled"
+output: pdf_document
+date: '2022-08-17'
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(openxlsx)
+library(dplyr)
+```
+
+## Cargar datos
+
+```{r}
+data = read.xlsx("./data/data_alex.xlsx")
+
+data = data[,1:396]
+```
+
+```{r}
+# Recategorizar la variable
+
+dict <- c(`Ait isquemia cerebral transitoria` ="AIT",
+          `AIT. Atac isquemic transitori 435.91`="AIT",
+          `Atac isquemic cerebral transitori no especificat`="AIT",
+          `Hemorragia intracerebral no traumatica,localitzacio no especificada`="Hematoma",
+          `Hemorragia intracranial no traumatica no especificada`="Hematoma",
+          `Hemorragia subaracnoidal no traumatica de localitzacio no especificada`="HSA", 
+          `Hemorragia subdural no traumatica no especificada` = "HSD", 
+          `Ictus mimic` = "Mimic", 
+          `Ictus Mimic` = "Mimic", 
+          `Infart agut de medul.la espinal (embolic) (no embolic)` = "Medula", 
+          `Infart cerebral no especificat` = "Ictus", 
+          `Trombosi no piogena del sistema venos intracranial` = "TVcere")
+
+data$new_dx =  dict[match(data$DIAGNOSTIC_ICTUS, names(dict))]
+
+# Filtramos datos
+data = data%>%filter(new_dx%in% c("AIT", "Hematoma", "Ictus", "Mimic"))
+
+# Fusionamos fechas
+# Siempre manda la fecha de sospita, despues la de normal
+
+data = data %>% 
+  mutate(
+    data_inici_sint = coalesce(S_DATA_INICI_SINTOMATOLOGIA, DATAINICISIMPTOMATOLOGIA), 
+    hora_inici_sint = coalesce(HORA_INICI_SINTOMATOLOGIA, HORAINICISIMPTOMATOLOGIA), 
+    data_entra_urg  = coalesce(S_DATA_ENTRADA_URG, DATA_ENTRADA_URGENCIES), 
+    hora_entra_urg  = coalesce(S_HORA_ENTRADA_URG, HORA_ENTRADA_URGENCIES)
+  )
+
+minimo = as.Date("2018-01-01")
+maximo = as.Date("2022-01-01")
+data$data_entra_urg = convertToDate(data$data_entra_urg)
+data$data_inici_sint = convertToDate(data$data_inici_sint)
+
+data = data %>%
+  filter(data_entra_urg>=minimo)%>%
+  filter(data_entra_urg<maximo)
+
+anticoagulantes = grepl("^MHAC", names(data))
+nom_anticoag =names(data[,which(anticoagulantes)])
+data[,anticoagulantes] = lapply(data[,anticoagulantes], as.numeric)
+
+data = data %>%
+  mutate(
+    anticoag_si = coalesce(MHAC_SI, MHAC_ACENOCUMAROL, MHAC_APIXABAN, 
+                           MHAC_APIXABAN_2_5_MH, MHAC_APIXABAN_5_MH, 
+                           MHAC_DABIGATRAN, MHAC_DABIGATRAN, 
+                           MHAC_DABIGATRAN_110_MH, MHAC_DABIGATRAN_150_MH, 
+                           MHAC_EDOXABAN, MHAC_EDOXABAN_30_MH, 
+                           MHAC_EDOXABAN_60_MH, MHAC_HEPARIN, 
+                           MHAC_RIVAROXABAN, MHAC_RIVAROXABAN_15_MH, 
+                           MHAC_RIVAROXABAN_20_MH, MHAC_HBPM, 
+                           MHAC_WARFARIN, MHAC_ALTRES
+      ))
+
+nom_variables = c(
+  "PACIENT", "new_dx", "EDAT", "SEXE", "HTA", "DM_1", "DM_2", 
+  "DISLIPEMIA", "CARDIOPATIA_ISQUEMICA", "OBESITAT", "DEPENDENCIA_TABAC", 
+  "ABUS_ALCOHOL", "ARTEOPATIA_PERIFERICA", "FIBRILACIO_AURICULAR", "MPOC", 
+  "INSUFICIENCIA_CARDIACA", "VALVULOPATIES", "INSUFICIENCIA_RENAL_CRONICA", 
+  "ICTUS_PREVIS", "ICTUS_DESPERTAR_INICI_INCERT", "Temps_Sintomes_URG", 
+  "PRESSIO_ARTERIAL_SISTOLICA", "PRESSIO_ARTERIAL_DIASTOLICA", "TEMPERATURA", 
+  "GLICEMIA_CAPILAR_FASE_AGUDA", "NIHSS_DEBUT_ICTUS_TOTAL", "LATERALITAT_ICTUS",
+  "anticoag_si", "ESCALA_RACE", "OCSP", "TEMPS_PORTA_AGULLA", "TEMPS_PORTA_AGULLA_AUTOMATIC", 
+  "data_inici_sint", "hora_inici_sint",  "data_entra_urg", "hora_entra_urg", 
+  "anticoag_si"
+  
+)
+names(data)
+```
+
